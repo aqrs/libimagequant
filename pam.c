@@ -200,7 +200,7 @@ LIQ_PRIVATE histogram *pam_acolorhashtoacolorhist(const struct acolorhash_table 
     };
     if (!hist->achv) return NULL;
 
-    float gamma_lut[256];
+    float gamma_lut[MAX_PALETTE];
     to_f_set_gamma(gamma_lut, gamma);
 
     /* Limit perceptual weight to 1/10th of the image surface area to prevent
@@ -279,7 +279,7 @@ LIQ_PRIVATE void pam_freecolormap(colormap *c)
 
 LIQ_PRIVATE void to_f_set_gamma(float gamma_lut[], const double gamma)
 {
-    for(int i=0; i < 256; i++) {
+    for(int i=0; i < MAX_PALETTE; i++) {
         gamma_lut[i] = pow((double)i/255.0, internal_gamma/gamma);
     }
 }

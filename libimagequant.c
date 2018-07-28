@@ -88,7 +88,7 @@ struct liq_image {
     void *row_callback_user_info;
     liq_image *background;
     float min_opaque_val;
-    f_pixel fixed_colors[256];
+    f_pixel fixed_colors[MAX_PALETTE];
     unsigned short fixed_colors_count;
     bool free_pixels, free_rows, free_rows_internal;
 };
@@ -134,7 +134,7 @@ struct liq_histogram {
 
     struct acolorhash_table *acht;
     double gamma;
-    f_pixel fixed_colors[256];
+    f_pixel fixed_colors[MAX_PALETTE];
     unsigned short fixed_colors_count;
     unsigned short ignorebits;
     bool had_image_added;
@@ -303,7 +303,7 @@ LIQ_EXPORT LIQ_NONNULL int liq_get_max_quality(const liq_attr *attr)
 LIQ_EXPORT LIQ_NONNULL liq_error liq_set_max_colors(liq_attr* attr, int colors)
 {
     if (!CHECK_STRUCT_TYPE(attr, liq_attr)) return LIQ_INVALID_POINTER;
-    if (colors < 2 || colors > 256) return LIQ_VALUE_OUT_OF_RANGE;
+    if (colors < 2 || colors > MAX_PALETTE) return LIQ_VALUE_OUT_OF_RANGE;
 
     attr->max_colors = colors;
     return LIQ_OK;
@@ -519,9 +519,9 @@ LIQ_EXPORT liq_attr* liq_attr_create_with_allocator(void* (*custom_malloc)(size_
 LIQ_EXPORT LIQ_NONNULL liq_error liq_image_add_fixed_color(liq_image *img, liq_color color)
 {
     if (!CHECK_STRUCT_TYPE(img, liq_image)) return LIQ_INVALID_POINTER;
-    if (img->fixed_colors_count > 255) return LIQ_UNSUPPORTED;
+    if (img->fixed_colors_count > MAX_PALETTE-1) return LIQ_UNSUPPORTED;
 
-    float gamma_lut[256];
+    float gamma_lut[MAX_PALETTE];
     to_f_set_gamma(gamma_lut, img->gamma);
     img->fixed_colors[img->fixed_colors_count++] = rgba_to_f(gamma_lut, (rgba_pixel){
         .r = color.r,
@@ -534,7 +534,7 @@ LIQ_EXPORT LIQ_NONNULL liq_error liq_image_add_fixed_color(liq_image *img, liq_c
 
 LIQ_NONNULL static liq_error liq_histogram_add_fixed_color_f(liq_histogram *hist, f_pixel color)
 {
-    if (hist->fixed_colors_count > 255) return LIQ_UNSUPPORTED;
+    if (hist->fixed_colors_count > MAX_PALETTE-1) return LIQ_UNSUPPORTED;
 
     hist->fixed_colors[hist->fixed_colors_count++] = color;
     return LIQ_OK;
@@ -544,7 +544,7 @@ LIQ_EXPORT LIQ_NONNULL liq_error liq_histogram_add_fixed_color(liq_histogram *hi
 {
     if (!CHECK_STRUCT_TYPE(hist, liq_histogram)) return LIQ_INVALID_POINTER;
 
-    float gamma_lut[256];
+    float gamma_lut[MAX_PALETTE];
     to_f_set_gamma(gamma_lut, gamma ? gamma : 0.45455);
     const f_pixel px = rgba_to_f(gamma_lut, (rgba_pixel){
         .r = color.r,
@@ -828,7 +828,7 @@ LIQ_NONNULL static bool liq_image_get_row_f_init(liq_image *img)
         return false;
     }
 
-    float gamma_lut[256];
+    float gamma_lut[MAX_PALETTE];
     to_f_set_gamma(gamma_lut, img->gamma);
     for(unsigned int i=0; i < img->height; i++) {
         convert_row_to_f(img, &img->f_pixels[i*img->width], i, gamma_lut);
@@ -840,7 +840,7 @@ LIQ_NONNULL static const f_pixel *liq_image_get_row_f(liq_image *img, unsigned i
 {
     if (!img->f_pixels) {
         assert(img->temp_f_row); // init should have done that
-        float gamma_lut[256];
+        float gamma_lut[MAX_PALETTE];
         to_f_set_gamma(gamma_lut, img->gamma);
         f_pixel *row_for_thread = img->temp_f_row + LIQ_TEMP_ROW_WIDTH(img->width) * omp_get_thread_num();
         convert_row_to_f(img, row_for_thread, row, gamma_lut);
@@ -1214,7 +1214,7 @@ inline static unsigned int posterize_channel(unsigned int color, unsigned int bi
 
 LIQ_NONNULL static void set_rounded_palette(liq_palette *const dest, colormap *const map, const double gamma, unsigned int posterize)
 {
-    float gamma_lut[256];
+    float gamma_lut[MAX_PALETTE];
     to_f_set_gamma(gamma_lut, gamma);
 
     dest->count = map->colors;
@@ -1250,7 +1250,7 @@ LIQ_EXPORT LIQ_NONNULL const liq_palette *liq_get_palette(liq_result *result)
     return &result->int_palette;
 }
 
-LIQ_NONNULL static float remap_to_palette(liq_image *const input_image, unsigned char *const *const output_pixels, colormap *const map)
+LIQ_NONNULL static float remap_to_palette(liq_image *const input_image, unsigned short *const *const output_pixels, colormap *const map)
 {
     const int rows = input_image->height;
     const unsigned int cols = input_image->width;
@@ -1347,7 +1347,7 @@ inline static f_pixel get_dithered_pixel(const float dither_level, const float m
 
   If output_image_is_remapped is true, only pixels noticeably changed by error diffusion will be written to output image.
  */
-LIQ_NONNULL static bool remap_to_palette_floyd(liq_image *input_image, unsigned char *const output_pixels[], liq_remapping_result *quant, const float max_dither_error, const bool output_image_is_remapped)
+LIQ_NONNULL static bool remap_to_palette_floyd(liq_image *input_image, unsigned short *const output_pixels[], liq_remapping_result *quant, const float max_dither_error, const bool output_image_is_remapped)
 {
     const int rows = input_image->height, cols = input_image->width;
     const unsigned char *dither_map = quant->use_dither_map ? (input_image->dither_map ? input_image->dither_map : input_image->edges) : NULL;
@@ -1781,7 +1781,7 @@ LIQ_NONNULL static void contrast_maps(liq_image *image)
  * and peeks 1 pixel above/below. Full 2d algorithm doesn't improve it significantly.
  * Correct flood fill doesn't have visually good properties.
  */
-LIQ_NONNULL static void update_dither_map(liq_image *input_image, unsigned char *const *const row_pointers, colormap *map)
+LIQ_NONNULL static void update_dither_map(liq_image *input_image, unsigned short *const *const row_pointers, colormap *map)
 {
     const unsigned int width = input_image->width;
     const unsigned int height = input_image->height;
@@ -2078,15 +2078,15 @@ LIQ_EXPORT LIQ_NONNULL liq_error liq_write_remapped_image(liq_result *result, li
         return LIQ_BUFFER_TOO_SMALL;
     }
 
-    LIQ_ARRAY(unsigned char *, rows, input_image->height);
-    unsigned char *buffer_bytes = buffer;
+    LIQ_ARRAY(unsigned short *, rows, input_image->height);
+    unsigned short *buffer_bytes = buffer;
     for(unsigned int i=0; i < input_image->height; i++) {
         rows[i] = &buffer_bytes[input_image->width * i];
     }
     return liq_write_remapped_image_rows(result, input_image, rows);
 }
 
-LIQ_EXPORT LIQ_NONNULL liq_error liq_write_remapped_image_rows(liq_result *quant, liq_image *input_image, unsigned char **row_pointers)
+LIQ_EXPORT LIQ_NONNULL liq_error liq_write_remapped_image_rows(liq_result *quant, liq_image *input_image, unsigned short **row_pointers)
 {
     if (!CHECK_STRUCT_TYPE(quant, liq_result)) return LIQ_INVALID_POINTER;
     if (!CHECK_STRUCT_TYPE(input_image, liq_image)) return LIQ_INVALID_POINTER;

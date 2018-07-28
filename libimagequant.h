@@ -28,6 +28,8 @@
 #endif
 #endif
 
+#define MAX_PALETTE	65536
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -45,7 +47,7 @@ typedef struct liq_color {
 
 typedef struct liq_palette {
     unsigned int count;
-    liq_color entries[256];
+    liq_color entries[MAX_PALETTE];
 } liq_palette;
 
 typedef enum liq_error {
@@ -129,7 +131,7 @@ LIQ_EXPORT LIQ_USERESULT double liq_get_output_gamma(const liq_result *result) L
 LIQ_EXPORT LIQ_USERESULT const liq_palette *liq_get_palette(liq_result *result) LIQ_NONNULL;
 
 LIQ_EXPORT liq_error liq_write_remapped_image(liq_result *result, liq_image *input_image, void *buffer, size_t buffer_size) LIQ_NONNULL;
-LIQ_EXPORT liq_error liq_write_remapped_image_rows(liq_result *result, liq_image *input_image, unsigned char **row_pointers) LIQ_NONNULL;
+LIQ_EXPORT liq_error liq_write_remapped_image_rows(liq_result *result, liq_image *input_image, unsigned short **row_pointers) LIQ_NONNULL;
 
 LIQ_EXPORT double liq_get_quantization_error(const liq_result *result) LIQ_NONNULL;
 LIQ_EXPORT int liq_get_quantization_quality(const liq_result *result) LIQ_NONNULL;
